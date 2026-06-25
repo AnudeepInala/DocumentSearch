@@ -1,0 +1,46 @@
+# ============================================================================
+# OpenSearch JVM Options
+# Optimized for 64 vCPU / 256GB RAM AWS Instance
+# Heap Size: 64GB (leaves 192GB for OS cache and other processes)
+# ============================================================================
+
+# Heap Size (64GB total - optimal for 256GB RAM system)
+-Xms64g
+-Xmx64g
+
+# GC Configuration - G1GC optimized for low latency
+-XX:+UseG1GC
+-XX:G1ReservePercent=25
+-XX:InitiatingHeapOccupancyPercent=30
+
+# GC Logging
+-Xlog:gc*,gc+age=trace,safepoint:file=/opt/document_search/logs/opensearch/gc.log:utctime,pid,tags:filecount=10,filesize=100m
+
+# JVM Settings
+-Djava.io.tmpdir=/opt/document_search/temp/opensearch
+-XX:+HeapDumpOnOutOfMemoryError
+-XX:HeapDumpPath=/opt/document_search/logs/opensearch/heapdump.hprof
+-XX:ErrorFile=/opt/document_search/logs/opensearch/hs_err_pid%p.log
+
+# Performance
+-XX:+AlwaysPreTouch
+-Xss1m
+-Djava.awt.headless=true
+-Dfile.encoding=UTF-8
+-Djna.nosys=true
+-Dio.netty.noUnsafe=true
+-Dio.netty.noKeySetOptimization=true
+-Dio.netty.recycler.maxCapacityPerThread=0
+-Dlog4j.shutdownHookEnabled=false
+-Dlog4j2.disable.jmx=true
+-Dlog4j.skipJansi=true
+
+# Security Manager (OpenSearch requires this)
+-Djava.security.manager=allow
+
+# Networking
+-Djava.net.preferIPv4Stack=true
+
+# Disable debugging assertions
+-da
+-server

@@ -1,0 +1,116 @@
+# Enterprise Document Search System - Python Dependencies
+# Production-Grade Requirements
+# Python 3.10+ Required
+
+# ============================================================================
+# Core Framework and Utilities
+# ============================================================================
+pyyaml==6.0.1                    # Configuration management
+python-dotenv==1.0.0             # Environment variable management
+click==8.1.7                     # CLI interface
+psutil==5.9.6                    # System resource monitoring
+pybloom-live==4.0.0             # Bloom filter for deduplication
+tqdm==4.66.1                     # Progress bars
+
+# ============================================================================
+# Data Processing
+# ============================================================================
+requests==2.31.0                 # HTTP client for Tika/OpenSearch
+urllib3==2.1.0                   # HTTP connection pooling
+httpx==0.25.2                    # Modern async HTTP client
+mmh3==4.0.1                      # MurmurHash3 for Bloom filter
+bitarray==2.8.3                  # Efficient bit array for Bloom filter
+
+# ============================================================================
+# OpenSearch/Elasticsearch Client
+# ============================================================================
+opensearch-py==2.4.2             # OpenSearch Python client
+
+# ============================================================================
+# Document Processing
+# ============================================================================
+python-magic==0.4.27             # File type detection
+python-magic-bin==0.4.14;platform_system=="Windows"  # Magic bindings for Windows
+chardet==5.2.0                   # Character encoding detection
+openpyxl==3.1.5                  # Excel engine required by pandas for taxonomy .xlsx
+
+# ============================================================================
+# OCR and Image Processing
+# ============================================================================
+Pillow==10.1.0                   # Image processing library
+opencv-python==4.8.1.78          # Image preprocessing
+numpy==1.26.2                    # Required by OpenCV
+pdf2image==1.16.3                # PDF to image conversion for OCR
+matplotlib>=3.7.0                # Charts for PDF reports
+
+# ============================================================================
+# Database
+# ============================================================================
+# SQLite is built into Python, no additional package needed
+
+# ============================================================================
+# PDF Report Generation
+# ============================================================================
+reportlab>=4.0                   # PDF document generation
+
+# ============================================================================
+# Web Framework (API and Dashboard)
+# ============================================================================
+fastapi==0.105.0                 # Modern web framework
+uvicorn[standard]==0.25.0        # ASGI server
+pydantic==2.5.2                  # Data validation
+python-multipart==0.0.6          # Form data parsing
+jinja2==3.1.2                    # Template engine for dashboard
+streamlit==1.29.0                # End-user progress dashboard
+streamlit-autorefresh==1.0.1     # Smooth dashboard auto-refresh helper
+
+# ============================================================================
+# NLP & Data
+# ============================================================================
+spacy>=3.7.0                     # NLP entity extraction and tagging
+pandas>=2.0.0                    # Data manipulation for dashboard/exports
+pyarrow>=14.0.0                  # Parquet engine for data export
+
+# ============================================================================
+# Monitoring and Metrics
+# ============================================================================
+
+# ============================================================================
+# Logging
+# ============================================================================
+
+# ============================================================================
+# Email Notifications
+# ============================================================================
+# smtplib is built into Python
+
+# ============================================================================
+# Concurrency and Parallelism
+# ============================================================================
+# multiprocessing is built into Python
+
+# ============================================================================
+# Date and Time
+# ============================================================================
+python-dateutil==2.8.2           # Date parsing and manipulation
+
+# ============================================================================
+# Hashing
+# ============================================================================
+# hashlib is built into Python
+
+# ============================================================================
+# Development Tools
+# ============================================================================
+
+# ============================================================================
+# Documentation (Optional)
+# ============================================================================
+
+# ============================================================================
+# Security
+# ============================================================================
+redis==5.0.1
+paddleocr==3.7.0
+paddlepaddle==3.3.1
+extract-msg==0.45.0

@@ -1,0 +1,16 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^cmd /c \"e:\\\\DocumentSearch\\\\\\.venv\\\\Scripts\\\\python\\.exe e:\\\\DocumentSearch\\\\test\\.py\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^cmd /c \"e:\\\\DocumentSearch\\\\\\.venv\\\\Scripts\\\\python\\.exe e:\\\\DocumentSearch\\\\test\\.py\" 2>&1$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^e:\\\\DocumentSearch\\\\\\.venv\\\\Scripts\\\\python\\.exe -m pip install pip-system-certs 2>&1$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

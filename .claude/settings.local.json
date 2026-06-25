@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//e/Test/RADAR_v1/src/ocr/**)",
+      "Read(//e/Test/RADAR_v1/src/extraction/**)"
+    ]
+  }
+}

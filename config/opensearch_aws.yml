@@ -1,0 +1,86 @@
+# ============================================================================
+# OpenSearch Configuration for Enterprise Document Search
+# Optimized for 64 vCPU / 256GB RAM AWS Instance
+# JVM Heap: 64GB (optimized for high-throughput indexing)
+# ============================================================================
+
+# Cluster Configuration
+cluster.name: enterprise-document-search
+node.name: node-1
+node.roles: [ master, data, ingest ]
+
+# Network
+network.host: 0.0.0.0  # Listen on all interfaces for AWS
+http.port: 9200
+transport.port: 9300
+
+# Discovery (single node configuration)
+discovery.type: single-node
+
+# Memory Lock (prevents swapping - enable on Linux)
+bootstrap.memory_lock: true
+
+# Paths
+path.data: ["/opt/document_search/opensearch/data"]
+path.logs: "/opt/document_search/opensearch/logs"
+
+# Thread Pools (optimized for 64 vCPU bulk indexing)
+thread_pool:
+  write:
+    size: 48  # 75% of 64 vCPUs for high bulk indexing throughput
+    queue_size: 3000  # Larger queue for burst handling
+  search:
+    size: 32  # 50% of vCPUs for concurrent searches
+    queue_size: 2000
+  get:
+    size: 32  # Increased for better GET performance
+    queue_size: 2000
+
+# Index Settings (defaults for new indices)
+action.auto_create_index: true
+
+# Bulk Request Limits
+http.max_content_length: 200mb  # Allow large bulk requests
+
+# Circuit Breakers (adjusted for 64GB heap)
+indices.breaker.total.limit: 85%  # 54.4GB of 64GB
+indices.breaker.request.limit: 50%  # 32GB
+indices.breaker.fielddata.limit: 40%  # 25.6GB
+
+# Performance Tuning (optimized for 64GB heap)
+indices.memory.index_buffer_size: 20%  # 12.8GB for indexing (5x larger!)
+indices.queries.cache.size: 10%  # 6.4GB for query cache (5x larger!)
+
+# NOTE: Index-level settings (like translog and merge settings) should be 
+# applied per-index via the index template or create index API, not here.
+# They will be set by the application when creating the index.
+
+# Search Settings
+search.max_buckets: 100000  # Increased for larger aggregations
+
+# Security (disabled for testing - ENABLE in production!)
+plugins.security.disabled: true
+
+# CORS (for development - restrict in production)
+http.cors.enabled: true
+http.cors.allow-origin: "*"
+http.cors.allow-methods: OPTIONS, HEAD, GET, POST, PUT, DELETE
+http.cors.allow-headers: X-Requested-With, Content-Type, Content-Length, Authorization
+
+# Logging
+logger.level: INFO
+logger.org.opensearch: INFO
+
+# Cluster Settings (for production monitoring)
+cluster.routing.allocation.disk.threshold_enabled: true
+cluster.routing.allocation.disk.watermark.low: 85%
+cluster.routing.allocation.disk.watermark.high: 90%
+cluster.routing.allocation.disk.watermark.flood_stage: 95%
+
+# Indexing Performance (for bulk operations)
+indices.memory.max_index_buffer_size: -1  # Unlimited (use 20% of heap)
+indices.memory.min_index_buffer_size: 96mb
+
+# Refresh Interval (will be overridden by application during bulk indexing)
+# Application sets to 30s during bulk, 1s after completion
+indices.refresh_interval: 1s

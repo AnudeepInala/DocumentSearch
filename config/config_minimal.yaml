@@ -1,0 +1,419 @@
+# Minimal Configuration for 16GB RAM / i5 System
+# Optimized for local development and testing
+# Can be scaled up for production AWS deployment
+
+# ============================================================================
+# REDIS CONFIGURATION (Optional - using SQLite is fine for testing)
+# ============================================================================
+redis:
+  url: "redis://localhost:6379/0"
+  max_connections: 10
+  timeout: 30
+
+# ============================================================================
+# NLP CONFIGURATION
+# ============================================================================
+nlp:
+  enabled: false  # Disabled to save memory
+  model_path: "en_core_web_md"
+  max_text_length: 100000
+
+# ============================================================================
+# SYSTEM PATHS
+# ============================================================================
+paths:
+  app_root: "c:\\Users\\DELL\\Music\\DocumentSearch"
+  source_drive: "{app_root}\\test_data"
+  working_root: "{app_root}\\runtime"
+  queue_db: "{app_root}\\runtime\\queue"
+  temp_dir: "{app_root}\\runtime\\temp"
+  logs_dir: "{app_root}\\runtime\\logs"
+  checkpoints_dir: "{app_root}\\runtime\\checkpoints"
+  metrics_dir: "{app_root}\\runtime\\metrics"
+  backup_dir: "{app_root}\\runtime\\backup"
+
+# ============================================================================
+# DISCOVERY CONFIGURATION - MINIMAL
+# ============================================================================
+discovery:
+  num_workers: 1  # Reduced from 4 to 1
+  partition_strategy: "AUTO"
+  custom_partitions: []
+  batch_size: 50  # Reduced from 100
+  target_rate: 1000  # Reduced from 30000
+  exclude_patterns:
+    - "$RECYCLE.BIN"
+    - "System Volume Information"
+    - "*.tmp"
+    - "*.temp"
+  filter_by_extension: false
+  excluded_extensions: [".exe", ".dll", ".sys"]
+  included_extensions: []
+  priority_folders: []
+  size_categories:
+    tiny: 1048576
+    small: 10485760
+    medium: 52428800
+    large: 9999999999
+
+# ============================================================================
+# EXTRACTION CONFIGURATION - MINIMAL (2 Tika servers, 4 workers)
+# ============================================================================
+extraction:
+  total_workers: 4  # Reduced from 24 to 4
+  
+  pools:
+    fast_track:
+      num_workers: 2  # Reduced from 8
+      queue_name: "tiny_queue"
+      tika_ports: [9998]  # Only 1 Tika server
+      target_time_seconds: 10
+      
+    standard_track:
+      num_workers: 2  # Reduced from 8
+      queue_name: "small_queue"
+      tika_ports: [9999]  # Only 1 Tika server
+      target_time_seconds: 60
+      
+    heavy_track:
+      num_workers: 0  # Disabled
+      queue_name: "medium_queue"
+      tika_ports: []
+      target_time_seconds: 180
+      
+    extreme_track:
+      num_workers: 0  # Disabled
+      queue_name: "large_queue"
+      tika_ports: []
+      target_time_seconds: 600
+  
+  # Only 2 Tika instances for minimal setup
+  tika:
+    instances:
+      - host: "localhost"
+        port: 9998
+        memory_mb: 1024  # Reduced from 2048
+        temp_dir: "{app_root}\\runtime\\temp\\tika1"
+      - host: "localhost"
+        port: 9999
+        memory_mb: 1024  # Reduced from 2048
+        temp_dir: "{app_root}\\runtime\\temp\\tika2"
+    
+    timeout_seconds: 60
+    max_retries: 2
+    retry_backoff_seconds: [1, 2]
+    connection_pool_size: 2
+  
+  ocr_detection:
+    min_text_length: 200
+    detect_by_mime_type: true
+    image_mime_prefixes: ["image/"]
+  
+  content_normalization:
+    lowercase: true
+    strip_whitespace: true
+    remove_timestamps: true
+    remove_page_numbers: true
+  
+  restart_after_files: 500
+
+# ============================================================================
+# INDEXING CONFIGURATION - MINIMAL
+# ============================================================================
+indexing:
+  num_workers: 2  # Reduced from 24 to 2
+  
+  opensearch:
+    hosts:
+      - "http://localhost:9200"
+    use_ssl: false
+    verify_certs: false
+    index_name: "enterprise_documents"
+    
+    # Smaller batches for minimal system
+    initial_batch_size: 100  # Reduced from 500
+    min_batch_size: 50  # Reduced from 200
+    max_batch_size: 500  # Reduced from 2000
+    batch_adjustment_step: 50  # Reduced from 200
+    
+    flush_timeout_seconds: 10  # Increased from 5
+    
+    target_batch_time_seconds: 2.0
+    fast_batch_threshold_seconds: 1.5
+    slow_batch_threshold_seconds: 3.0
+    
+    timeout_seconds: 30
+    max_retries: 3
+    retry_backoff_seconds: [1, 2, 4]
+    connection_pool_size: 2
+    
+    bulk_refresh_interval: "30s"
+    normal_refresh_interval: "1s"
+  
+  mapping:
+    shards: 1  # Reduced from 5
+    replicas: 0  # Reduced from 1 (no replicas for single node)
+    
+    field_boost:
+      file_name: 5.0
+      main_content: 2.0
+      embedded_content: 1.0
+      ocr_content: 0.8
+    
+    default_analyzer: "english"
+    ocr_analyzer: "standard"
+
+# ============================================================================
+# OCR CONFIGURATION - MINIMAL
+# ============================================================================
+ocr:
+  initial_workers: 2  # Reduced from 28 to 2
+  post_indexing_workers: 2  # Reduced from 44 to 2
+  
+  max_pages_per_pdf: 10  # Limit to first 10 pages for testing
+  
+  poppler_path: "{app_root}\\bin\\poppler\\bin"
+  
+  preprocessing:
+    convert_to_grayscale: true
+    apply_noise_reduction: false  # Disabled to save CPU
+    enhance_contrast: true
+    correct_skew: false  # Disabled to save CPU
+    binarize: true
+    target_dpi: 200  # Reduced from 300
+    use_opencv: true
+    use_pillow: true
+  
+  quality:
+    min_confidence: 25
+    good_confidence: 70
+    excellent_confidence: 90
+  
+  priorities: []
+  
+  multipage:
+    enable_parallel_pages: false  # Disabled for minimal system
+    max_parallel_pages: 1
+    incremental_update: true
+  
+  update_batch_size: 50  # Reduced from 100
+
+# ============================================================================
+# ORCHESTRATOR CONFIGURATION
+# ============================================================================
+orchestrator:
+  heartbeat_interval_seconds: 30
+  heartbeat_timeout_seconds: 90
+  service_check_interval_seconds: 60
+  resource_check_interval_seconds: 60
+  
+  cpu:
+    high_threshold_percent: 90  # Reduced from 95
+    low_threshold_percent: 40  # Reduced from 60
+    sustained_duration_seconds: 300
+    throttle_reduction_percent: 20
+    scale_up_percent: 10
+  
+  memory:
+    warning_threshold_gb: 12  # Adjusted for 16GB system
+    critical_threshold_gb: 14
+    emergency_threshold_gb: 15
+  
+  disk:
+    warning_threshold_gb: 50  # Reduced
+    critical_threshold_gb: 20
+    emergency_threshold_gb: 10
+  
+  checkpoint:
+    interval_seconds: 300
+    retention_count: 5  # Reduced from 10
+    auto_save_on_shutdown: true
+  
+  shutdown:
+    grace_period_seconds: 5
+    force_after_grace: true
+  
+  circuit_breaker:
+    failure_threshold: 5
+    timeout_seconds: 60
+    half_open_attempts: 3
+
+# ============================================================================
+# LOGGING CONFIGURATION
+# ============================================================================
+logging:
+  default_level: "INFO"
+  components:
+    discovery: "INFO"
+    extraction: "INFO"
+    indexing: "INFO"
+    ocr: "INFO"
+    orchestrator: "INFO"
+    api: "INFO"
+  rotation:
+    max_bytes: 52428800  # 50 MB (reduced from 100 MB)
+    backup_count: 7  # 7 days (reduced from 30)
+  format: "[%(asctime)s] [%(name)s] [%(levelname)s] [%(processName)s-%(process)d] %(message)s"
+  date_format: "%Y-%m-%d %H:%M:%S"
+  use_json: false
+
+# ============================================================================
+# ALERTING CONFIGURATION
+# ============================================================================
+alerting:
+  email:
+    enabled: false  # Disabled for minimal setup
+    smtp_host: "smtp.office365.com"
+    smtp_port: 587
+    use_tls: true
+    from_address: ""
+    to_addresses: []
+  
+  critical_alerts:
+    - type: "processing_stopped"
+      threshold_seconds: 600
+    - type: "opensearch_unhealthy"
+      threshold: "red"
+    - type: "disk_space_critical"
+      threshold_gb: 10
+    - type: "memory_critical"
+      threshold_percent: 95
+    - type: "error_rate_high"
+      threshold_percent: 5
+    - type: "worker_crashes"
+      threshold_count: 10
+      threshold_period_seconds: 3600
+  
+  warning_alerts:
+    - type: "processing_slow"
+      threshold_percent: 50
+    - type: "opensearch_degraded"
+      threshold: "yellow"
+    - type: "disk_space_low"
+      threshold_gb: 20
+    - type: "error_rate_elevated"
+      threshold_percent: 1
+  
+  progress_updates:
+    interval_hours: 6
+  daily_summary:
+    enabled: false  # Disabled
+    time: "08:00"
+  completion_notification:
+    enabled: false  # Disabled
+
+# ============================================================================
+# API CONFIGURATION
+# ============================================================================
+api:
+  host: "0.0.0.0"
+  port: 8080
+  workers: 2  # Reduced from 4
+  require_auth: false
+  cors_enabled: true
+  allowed_origins:
+    - "http://localhost:*"
+  
+  search:
+    default_page_size: 20
+    max_page_size: 100
+    highlight_snippet_size: 150
+    max_highlights: 3
+    default_fields:
+      - "file_name^5"
+      - "main_content^2"
+      - "embedded_content"
+      - "ocr_content^0.8"
+  
+  rate_limit:
+    enabled: true
+    requests_per_minute: 100
+
+# ============================================================================
+# DASHBOARD CONFIGURATION
+# ============================================================================
+dashboard:
+  refresh_interval_seconds: 5
+  history_hours: 24
+  show_worker_details: true
+  show_error_details: true
+  show_resource_graphs: true
+
+# ============================================================================
+# OPERATIONAL MODES
+# ============================================================================
+modes:
+  default: "full"
+  available:
+    - "full"
+    - "resume"
+    - "incremental"
+  incremental:
+    check_modification_time: true
+    check_file_hash: true
+    rescan_interval_hours: 24
+
+# ============================================================================
+# PERFORMANCE TARGETS - ADJUSTED FOR MINIMAL SYSTEM
+# ============================================================================
+performance:
+  targets:
+    discovery_files_per_second: 1000  # Reduced
+    extraction_files_per_second: 10  # Reduced
+    indexing_docs_per_second: 500  # Reduced
+    ocr_pages_per_hour: 50  # Reduced
+  
+  quality:
+    target_extraction_success_rate: 0.99
+    target_indexing_success_rate: 0.999
+    target_ocr_confidence: 0.85
+
+# ============================================================================
+# DEDUPLICATION CONFIGURATION
+# ============================================================================
+deduplication:
+  bloom_filter:
+    expected_elements: 100000  # Reduced from 5M
+    false_positive_rate: 0.01
+  file_level:
+    enabled: true
+    hash_algorithm: "sha256"
+  content_level:
+    enabled: true
+    normalization:
+      lowercase: true
+      remove_whitespace: true
+      remove_punctuation: false
+    similarity_threshold: 1.0
+  duplicate_handling:
+    store_full_content: false
+    link_duplicates: true
+    track_duplicate_paths: true
+    max_duplicate_paths: 100
+
+# ============================================================================
+# BACKUP AND RECOVERY
+# ============================================================================
+backup:
+  config_backup:
+    enabled: true
+    interval_hours: 24
+    retention_days: 7  # Reduced from 30
+  queue_backup:
+    enabled: true
+    before_major_operations: true
+  checkpoint_backup:
+    enabled: true
+    retention_count: 5  # Reduced from 20
+
+# ============================================================================
+# TESTING CONFIGURATION
+# ============================================================================
+testing:
+  test_mode: false
+  test_data_path: "{app_root}\\test_data"
+  sample_size: 100  # Reduced from 1000
+  baseline:
+    extraction_time_per_mb: 0.5
+    indexing_time_per_1000_docs: 2.0
+    ocr_time_per_page: 45

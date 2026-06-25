@@ -1,0 +1,81 @@
+﻿# ============================================================================
+# OpenSearch Configuration for Enterprise Document Search - Windows AWS
+# Optimized for 64 vCPU / 256GB RAM AWS Windows Instance
+# JVM Heap: 64GB (optimized for high-throughput indexing)
+# ============================================================================
+
+# Cluster Configuration
+cluster.name: enterprise-document-search
+node.name: node-1
+node.roles: [ master, data, ingest ]
+
+# Network
+network.host: 0.0.0.0
+http.port: 9200
+transport.port: 9300
+
+# Discovery (single node configuration)
+discovery.type: single-node
+
+# Memory Lock (disabled on Windows - cannot lock memory)
+bootstrap.memory_lock: false
+
+# Paths - Windows
+path.data: ["E:\\DocumentSearch\\runtime\\opensearch\\data2"]
+path.logs: "E:\\DocumentSearch\\runtime\\opensearch\\logs"
+
+# Thread Pools (default values let OpenSearch auto-size safely based on CPU cores)
+# thread_pool:
+#   write:
+#     size: 48
+#     queue_size: 3000
+#   search:
+#     size: 32
+#     queue_size: 2000
+#   get:
+#     size: 32
+#     queue_size: 2000
+
+# Index Settings
+action.auto_create_index: true
+
+# Bulk Request Limits
+http.max_content_length: 200mb
+
+# Circuit Breakers (adjusted for 64GB heap)
+indices.breaker.total.limit: 85%
+indices.breaker.request.limit: 50%
+indices.breaker.fielddata.limit: 40%
+
+# Performance Tuning (optimized for 64GB heap)
+indices.memory.index_buffer_size: 20%
+indices.queries.cache.size: 10%
+
+# Search Settings
+search.max_buckets: 100000
+
+# Security (disabled for testing)
+plugins.security.disabled: true
+
+# CORS
+http.cors.enabled: true
+http.cors.allow-origin: "*"
+http.cors.allow-methods: OPTIONS, HEAD, GET, POST, PUT, DELETE
+http.cors.allow-headers: X-Requested-With, Content-Type, Content-Length, Authorization
+
+# Logging
+logger.level: INFO
+logger.org.opensearch: INFO
+
+# Cluster Settings
+cluster.routing.allocation.disk.threshold_enabled: true
+cluster.routing.allocation.disk.watermark.low: 85%
+cluster.routing.allocation.disk.watermark.high: 90%
+cluster.routing.allocation.disk.watermark.flood_stage: 95%
+
+# Indexing Performance
+indices.memory.max_index_buffer_size: -1
+indices.memory.min_index_buffer_size: 96mb
+
+# Note: refresh_interval is set per-index, not as a cluster setting
+# Default index refresh: index.refresh_interval: 1s (set during index creation)
