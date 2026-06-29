@@ -252,6 +252,7 @@ def _make_accuracy_chart(snippets: List[Dict], smart_id: str = "") -> Optional[b
         # --- Calculate snippet impacts (same logic as review tab) ---
         pending_counts: Dict[str, int] = {}
         pending_impacts: Dict[str, float] = {}
+        accepted_impacts_by_type: Dict[str, float] = {}
         accepted_impact_total = 0.0
         doc_snippet_types: set = set()
 
@@ -264,6 +265,7 @@ def _make_accuracy_chart(snippets: List[Dict], smart_id: str = "") -> Optional[b
                 pending_counts[t] = pending_counts.get(t, 0) + 1
                 pending_impacts[t] = pending_impacts.get(t, 0.0) + impact
             elif status == "accepted":
+                accepted_impacts_by_type[t] = accepted_impacts_by_type.get(t, 0.0) + impact
                 accepted_impact_total += impact
 
         segment_cfg = {
@@ -274,7 +276,8 @@ def _make_accuracy_chart(snippets: List[Dict], smart_id: str = "") -> Optional[b
             "stamp": {"label": "Stamp", "value": avg_stamp, "color": "#F59E0B", "snippet_key": "stamp"},
             "handwritten": {"label": "Handwritten", "value": avg_handwritten, "color": "#EC4899",
                             "snippet_key": "handwritten", "extra_snippet_key": "signature"},
-            "noise": {"label": "Noise", "value": avg_noise, "color": "#64748B", "snippet_key": "text_anomaly"},
+            "noise": {"label": "Noise", "value": avg_noise, "color": "#64748B", "snippet_key": "noise",
+                      "extra_snippet_key": "text_anomaly"},
         }
 
         segment_cfg["clean"]["value"] += accepted_impact_total
@@ -282,18 +285,21 @@ def _make_accuracy_chart(snippets: List[Dict], smart_id: str = "") -> Optional[b
         for key, cfg in segment_cfg.items():
             if key in ("clean", "whitespace"):
                 continue
-            has_snippets = False
-            if "snippet_key" in cfg and cfg["snippet_key"] in doc_snippet_types:
-                has_snippets = True
-            if "extra_snippet_key" in cfg and cfg["extra_snippet_key"] in doc_snippet_types:
-                has_snippets = True
-            if has_snippets:
-                snippet_sum = 0.0
-                if "snippet_key" in cfg:
-                    snippet_sum += pending_impacts.get(cfg["snippet_key"], 0.0)
-                if "extra_snippet_key" in cfg:
-                    snippet_sum += pending_impacts.get(cfg["extra_snippet_key"], 0.0)
-                cfg["value"] = snippet_sum
+
+            accepted_type_impact = 0.0
+            pending_type_impact = 0.0
+            if "snippet_key" in cfg:
+                sk = cfg["snippet_key"]
+                accepted_type_impact += accepted_impacts_by_type.get(sk, 0.0)
+                pending_type_impact += pending_impacts.get(sk, 0.0)
+            if "extra_snippet_key" in cfg:
+                esk = cfg["extra_snippet_key"]
+                accepted_type_impact += accepted_impacts_by_type.get(esk, 0.0)
+                pending_type_impact += pending_impacts.get(esk, 0.0)
+
+            # Subtract resolved (accepted) impacts from baseline, but ensure it is at least the remaining pending (unresolved) impact
+            cfg["value"] = max(cfg["value"] - accepted_type_impact, pending_type_impact)
+            cfg["value"] = max(0.0, cfg["value"])
 
         total_val_sum = sum(cfg["value"] for cfg in segment_cfg.values())
         if total_val_sum > 0:

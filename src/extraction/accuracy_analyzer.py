@@ -202,8 +202,11 @@ class AccuracyAnalyzer:
             zone_metrics = self._segment_page_opencv(raw_image_bytes)
             zone_metrics = self._refine_zones_yolo(raw_image_bytes, zone_metrics)
 
-            # Step 1b: Detect faded text bboxes and merge them
-            faded_regions = self._detect_faded_text_regions(raw_image_bytes)
+            # Step 1b: Detect faded text bboxes and merge them (passing existing bboxes to exclude stamp/logo regions)
+            faded_regions = self._detect_faded_text_regions(
+                raw_image_bytes,
+                exclude_bboxes=zone_metrics.get("bboxes", [])
+            )
             if "bboxes" not in zone_metrics:
                 zone_metrics["bboxes"] = []
             zone_metrics["bboxes"].extend(faded_regions)
@@ -241,7 +244,7 @@ class AccuracyAnalyzer:
                 faded_text_pct = loss["accuracy_loss_breakdown"].get("unreadable_text_pct", 0.0)
                 logo_pct = loss["accuracy_loss_breakdown"].get("logos_images_pct", 0.0)
                 stamp_pct = loss["accuracy_loss_breakdown"].get("stamps_seals_pct", 0.0)
-                handwritten_pct = loss["accuracy_loss_breakdown"].get("handwritten_pct", 0.0)
+                handwritten_pct = loss["accuracy_loss_breakdown"].get("handwritten_pct", 0.0) or loss["accuracy_loss_breakdown"].get("signatures_pct", 0.0)
                 whitespace_pct = loss["accuracy_loss_breakdown"].get("whitespace_margins_pct", 0.0)
                 noise_pct = loss["accuracy_loss_breakdown"].get("noise_artifacts_pct", 0.0)
                 
@@ -736,7 +739,7 @@ class AccuracyAnalyzer:
                 perimeter = cv2.arcLength(cnt, True)
                 if perimeter > 0:
                     circularity = 4 * np.pi * cv2.contourArea(cnt) / (perimeter ** 2)
-                    if circularity > 0.4:
+                    if circularity > 0.50:
                         stamp_px += area
                         bboxes.append({
                             "type": "stamp",
@@ -1228,7 +1231,7 @@ class AccuracyAnalyzer:
                     return False
         return True
 
-    def _detect_faded_text_regions(self, image_bytes: bytes) -> List[Dict[str, Any]]:
+    def _detect_faded_text_regions(self, image_bytes: bytes, exclude_bboxes: List[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """Detect regions where printed text exists but is too faint for Otsu binarization."""
         nparr = np.frombuffer(image_bytes, np.uint8)
         img_gray = cv2.imdecode(nparr, cv2.IMREAD_GRAYSCALE)
@@ -1253,13 +1256,34 @@ class AccuracyAnalyzer:
         # Faded = visible in adaptive but NOT in Otsu
         faded_only = cv2.bitwise_and(adaptive_mask, cv2.bitwise_not(otsu_mask))
 
-        # Merge letters into line blobs
-        h_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (40, 1))
+        # Zero out already-detected stamp or logo regions with a small padding
+        if exclude_bboxes:
+            for eb in exclude_bboxes:
+                if eb.get("type") in ("stamp", "logo"):
+                    ex1, ey1, ex2, ey2 = eb["bbox"]
+                    pad = 15
+                    faded_only[max(0, ey1-pad):min(h, ey2+pad), max(0, ex1-pad):min(w, ex2+pad)] = 0
+
+        # Merge letters into line blobs (reduced kernel size to prevent merging over stamps)
+        h_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (20, 1))
         line_blobs = cv2.dilate(faded_only, h_kernel, iterations=1)
         v_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 8))
         line_blobs = cv2.dilate(line_blobs, v_kernel, iterations=1)
 
         contours, _ = cv2.findContours(line_blobs, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        def _iou(a, b):
+            ix1 = max(a[0], b[0])
+            iy1 = max(a[1], b[1])
+            ix2 = min(a[2], b[2])
+            iy2 = min(a[3], b[3])
+            iw = max(0, ix2 - ix1)
+            ih = max(0, iy2 - iy1)
+            inter = iw * ih
+            if inter == 0:
+                return 0.0
+            ua = (a[2]-a[0])*(a[3]-a[1]) + (b[2]-b[0])*(b[3]-b[1]) - inter
+            return inter / max(ua, 1)
 
         faded_bboxes = []
         for cnt in contours:
@@ -1274,9 +1298,23 @@ class AccuracyAnalyzer:
                 continue
 
             impact = round(area / total_px * 100, 3)
+            fb_box = [int(x), int(y), int(x+cw), int(y+ch)]
+
+            # Filter out any faded text bbox that heavily overlaps existing stamp/logo bboxes
+            overlaps_stamp = False
+            if exclude_bboxes:
+                for eb in exclude_bboxes:
+                    if eb.get("type") in ("stamp", "logo"):
+                        if _iou(fb_box, eb["bbox"]) > 0.25:
+                            overlaps_stamp = True
+                            break
+
+            if overlaps_stamp:
+                continue
+
             faded_bboxes.append({
                 "type": "faded_text",
-                "bbox": [int(x), int(y), int(x+cw), int(y+ch)],
+                "bbox": fb_box,
                 "impact": impact,
                 "ink_density": round(ink_density, 4),
                 "needs_paddle_confirm": True,

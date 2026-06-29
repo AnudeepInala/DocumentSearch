@@ -456,6 +456,7 @@ def _render_accuracy_waterfall_chart(snippets: List[Dict[str, Any]], selected_do
     # Calculate counts and impact sums dynamically from snippets (all reviews for the doc)
     pending_counts = {}
     pending_impacts = {}
+    accepted_impacts_by_type = {}
     accepted_impact_total = 0.0
     doc_snippet_types = set()
     
@@ -469,6 +470,7 @@ def _render_accuracy_waterfall_chart(snippets: List[Dict[str, Any]], selected_do
             pending_counts[t] = pending_counts.get(t, 0) + 1
             pending_impacts[t] = pending_impacts.get(t, 0.0) + impact
         elif status == "accepted":
+            accepted_impacts_by_type[t] = accepted_impacts_by_type.get(t, 0.0) + impact
             accepted_impact_total += impact
 
     # Mapping display configuration for segments
@@ -491,28 +493,25 @@ def _render_accuracy_waterfall_chart(snippets: List[Dict[str, Any]], selected_do
     # Add verified (accepted) snippet impacts to the baseline Extractable Text bar
     segment_cfg["clean"]["value"] += accepted_impact_total
 
-    # For categories present as snippets in the document, use their actual snippet impact.
-    # Ensure bars appear for any snippet type that exists, even if db composition is 0.
+    # For categories present as snippets in the document, adjust baseline using accepted and pending snippet impacts.
     for key, cfg in segment_cfg.items():
         if key == "clean" or key == "whitespace":
             continue
 
-        has_snippets = False
-        snippet_total_impact = 0.0
+        accepted_type_impact = 0.0
+        pending_type_impact = 0.0
         if "snippet_key" in cfg:
             sk = cfg["snippet_key"]
-            if sk in doc_snippet_types:
-                has_snippets = True
-            snippet_total_impact += pending_impacts.get(sk, 0.0)
+            accepted_type_impact += accepted_impacts_by_type.get(sk, 0.0)
+            pending_type_impact += pending_impacts.get(sk, 0.0)
         if "extra_snippet_key" in cfg:
             esk = cfg["extra_snippet_key"]
-            if esk in doc_snippet_types:
-                has_snippets = True
-            snippet_total_impact += pending_impacts.get(esk, 0.0)
+            accepted_type_impact += accepted_impacts_by_type.get(esk, 0.0)
+            pending_type_impact += pending_impacts.get(esk, 0.0)
 
-        if has_snippets:
-            # Use actual snippet impact; guarantee minimum visibility if snippets exist
-            cfg["value"] = max(snippet_total_impact, 1.0) if snippet_total_impact < 1.0 else snippet_total_impact
+        # Subtract resolved (accepted) impacts from baseline, but ensure it is at least the remaining pending (unresolved) impact
+        cfg["value"] = max(cfg["value"] - accepted_type_impact, pending_type_impact)
+        cfg["value"] = max(0.0, cfg["value"])
 
     # Normalize all segments to sum to exactly 100.0% dynamically
     total_val_sum = sum(cfg["value"] for cfg in segment_cfg.values())
@@ -1399,11 +1398,12 @@ def _render_snippet_review_tab_inner(config: Any) -> None:
             for t in (preprocessing_cfg.get("visual_allowed_types") or [])
             if str(t).strip()
         }
-        if keep_signatures_visible and allowed_types:
-            # Legacy/manual signature boxes may have been saved as text_anomaly
-            # before force-keep type pinning. Include them in review visibility.
-            allowed_types.add("text_anomaly")
         if allowed_types:
+            allowed_types.add("full_page")
+            if keep_signatures_visible:
+                # Legacy/manual signature boxes may have been saved as text_anomaly
+                # before force-keep type pinning. Include them in review visibility.
+                allowed_types.add("text_anomaly")
             filtered = [
                 s for s in filtered
                 if str((s or {}).get("snippet_type", "")).lower() in allowed_types

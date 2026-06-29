@@ -604,6 +604,13 @@ class ConfigurationManager:
             testing=self.raw_config['testing']
         )
     
+    def reload_config(self) -> None:
+        """Reload configuration from disk and environment variables"""
+        self._load_config()
+        self._load_environment_variables()
+        self._validate_config()
+        self._create_config_objects()
+    
     def get_config(self) -> SystemConfig:
         """Get complete system configuration"""
         if self.config is None:

@@ -503,7 +503,8 @@ class OCRWorker:
                                     snippet_path=str(full_path),
                                     bounding_box=[0, 0, 9999, 9999],
                                     accuracy_impact=0.0,
-                                    reviewer_role="Document Reviewer"
+                                    reviewer_role="Document Reviewer",
+                                    extracted_text=ocr_text
                                 )
                                 update_snippet_review_status(review_id, status="pending")
                             except Exception as val_e:
@@ -1116,7 +1117,8 @@ class OCRWorker:
                                         snippet_path=str(full_path),
                                         bounding_box=[0, 0, 9999, 9999],
                                         accuracy_impact=0.0,
-                                        reviewer_role="Document Reviewer"
+                                        reviewer_role="Document Reviewer",
+                                        extracted_text=page_text
                                     )
                                     update_snippet_review_status(review_id, status="pending")
                                 except Exception as val_e:
@@ -1546,6 +1548,15 @@ class OCRWorker:
                 # Generate a unique review ID
                 review_id = f"{smart_id}_p{page_num}_{snippet_type}_{idx}"
                 
+                # Perform OCR on the cropped snippet to populate "RADAR Engine Extracted"
+                extracted_snippet_text = ""
+                try:
+                    ocr_res = self.paddle.extract_text(str(snippet_path))
+                    if ocr_res and ocr_res[0]:
+                        extracted_snippet_text = ocr_res[0]
+                except Exception as ocr_e:
+                    logger.debug(f"OCR snippet extraction failed: {ocr_e}")
+
                 # Check for approved templates using Cosine Similarity matching
                 is_auto_accepted = False
                 matched_vector_path = None
@@ -1586,7 +1597,8 @@ class OCRWorker:
                         snippet_path=str(snippet_path),
                         bounding_box=bbox,
                         accuracy_impact=impact,
-                        reviewer_role=reviewer_role
+                        reviewer_role=reviewer_role,
+                        extracted_text=extracted_snippet_text
                     )
                     update_snippet_review_status(review_id, status="accepted", feature_vector_path=matched_vector_path)
                 else:
@@ -1611,7 +1623,8 @@ class OCRWorker:
                         snippet_path=str(snippet_path),
                         bounding_box=bbox,
                         accuracy_impact=impact,
-                        reviewer_role=reviewer_role
+                        reviewer_role=reviewer_role,
+                        extracted_text=extracted_snippet_text
                     )
                     update_snippet_review_status(review_id, status="pending")
 
@@ -1683,10 +1696,75 @@ class OCRWorker:
         height_ratio = box_h / max(1, h)
         aspect_ratio = box_w / max(1, box_h)
 
+        if initial_type == "faded_text" and cropped_pil_img is not None:
+            reclassified = self._reclassify_faded_as_stamp_or_logo(
+                cropped_pil_img, bbox, page_dims
+            )
+            if reclassified:
+                logger.info(f"OCRWorker: Reclassified faded_text snippet {snippet_path or ''} to '{reclassified}' via visual analysis")
+                return reclassified, _get_role(reclassified)
+
         if initial_type == "signature" and aspect_ratio < 2.0 and height_ratio > 0.02:
             return "text_anomaly", _get_role("text_anomaly")
 
         return initial_type, _get_role(initial_type)
+
+    def _reclassify_faded_as_stamp_or_logo(
+        self, cropped_pil_img, bbox: List[int], page_dims: Tuple[int, int]
+    ) -> Optional[str]:
+        """Verify if a faded_text candidate is actually a stamp or logo using visual analysis."""
+        try:
+            import cv2
+            import numpy as np
+
+            # Convert PIL image to grayscale numpy array
+            pil_gray = cropped_pil_img.convert("L")
+            img = np.array(pil_gray)
+
+            h, w = img.shape
+            area = h * w
+            if area < 50:  # Too small to be a stamp or logo
+                return None
+
+            # Binarize using Otsu binarization
+            _, thresh = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+
+            # Find contours
+            contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if not contours:
+                return None
+
+            # Find the largest contour by area
+            largest_cnt = max(contours, key=cv2.contourArea)
+            cnt_area = cv2.contourArea(largest_cnt)
+            perimeter = cv2.arcLength(largest_cnt, True)
+
+            # Check circularity of the largest contour
+            circularity = 0.0
+            if perimeter > 0:
+                circularity = 4 * np.pi * cnt_area / (perimeter ** 2)
+
+            # Stamp/Seal circularity check (stamps are circular, aspect ratio near 1.0)
+            aspect_ratio = w / max(1, h)
+            if 0.7 < aspect_ratio < 1.4:
+                if circularity > 0.45:
+                    return "stamp"
+
+            # Image/Logo check (e.g. dense ink blob with low aspect ratio and significant area)
+            ink_density = np.count_nonzero(thresh) / max(area, 1)
+            x1, y1, x2, y2 = bbox
+            page_w, page_h = page_dims
+            box_w = x2 - x1
+            box_h = y2 - y1
+            page_area = page_w * page_h
+
+            if (page_area * 0.003 < area < page_area * 0.3) and (0.5 < aspect_ratio < 2.0) and (ink_density > 0.4):
+                return "logo"
+
+        except Exception as exc:
+            logger.warning(f"OCRWorker: Visual reclassification failed: {exc}")
+
+        return None
 
     @staticmethod
     def _get_reviewer_role(snippet_type: str) -> str:
