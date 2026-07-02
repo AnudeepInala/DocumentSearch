@@ -1,0 +1,46 @@
+# ============================================================================
+# OpenSearch JVM Options - Windows
+# Paths resolved from {app_root} by start_everything.bat at startup.
+# Heap: 4g local default (raise to 12g+ on servers with sufficient RAM).
+# ============================================================================
+
+# Heap Size (4g local default - safe for development machines)
+-Xms12g
+-Xmx12g
+
+# GC Configuration - G1GC optimized for low latency
+-XX:+UseG1GC
+-XX:G1ReservePercent=25
+-XX:InitiatingHeapOccupancyPercent=30
+
+# GC Logging
+-Xlog:gc*,gc+age=trace,safepoint:file={app_root}/runtime/opensearch/gc.log:utctime,pid,tags:filecount=10,filesize=100m
+
+# JVM Settings
+-Djava.io.tmpdir={app_root}/runtime/temp/opensearch
+-XX:+HeapDumpOnOutOfMemoryError
+-XX:HeapDumpPath={app_root}/runtime/opensearch/heapdump.hprof
+-XX:ErrorFile={app_root}/runtime/opensearch/hs_err_pid%p.log
+
+# Performance
+-XX:+AlwaysPreTouch
+-Xss1m
+-Djava.awt.headless=true
+-Dfile.encoding=UTF-8
+-Djna.nosys=true
+-Dio.netty.noUnsafe=true
+-Dio.netty.noKeySetOptimization=true
+-Dio.netty.recycler.maxCapacityPerThread=0
+-Dlog4j.shutdownHookEnabled=false
+-Dlog4j2.disable.jmx=true
+-Dlog4j.skipJansi=true
+
+# Security Manager (OpenSearch requires this)
+-Djava.security.manager=allow
+
+# Networking
+-Djava.net.preferIPv4Stack=true
+
+# Disable debugging assertions
+-da
+-server

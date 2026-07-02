@@ -1,0 +1,483 @@
+# AWS Production Configuration for 64 CPU / 256GB RAM
+# Optimized for high-throughput document processing
+# Based on root cause analysis of worker failures
+
+# ============================================================================
+# REDIS CONFIGURATION
+# ============================================================================
+redis:
+  url: "redis://localhost:6379/0"
+  max_connections: 50
+  timeout: 60
+
+# ============================================================================
+# NLP CONFIGURATION - ENABLED FOR AWS
+# ============================================================================
+nlp:
+  enabled: true  # Enable NLP on AWS
+  model_path: "en_core_web_lg"  # Use large model for better accuracy
+  max_text_length: 500000
+
+# ============================================================================
+# SYSTEM PATHS
+# ============================================================================
+paths:
+  source_drive: "/data/documents"  # Adjust for AWS
+  working_root: "/opt/document_search"
+  queue_db: "/opt/document_search/queue"
+  temp_dir: "/opt/document_search/temp"
+  logs_dir: "/opt/document_search/logs"
+  checkpoints_dir: "/opt/document_search/checkpoints"
+  metrics_dir: "/opt/document_search/metrics"
+  backup_dir: "/opt/document_search/backup"
+  app_root: "/opt/document_search"
+
+# ============================================================================
+# DISCOVERY CONFIGURATION - AWS OPTIMIZED
+# ============================================================================
+discovery:
+  num_workers: 8  # Use 8 CPUs for discovery
+  partition_strategy: "AUTO"
+  custom_partitions: []
+  batch_size: 500  # Larger batches
+  target_rate: 50000  # Higher target rate
+  exclude_patterns:
+    - "$RECYCLE.BIN"
+    - "System Volume Information"
+    - "*.tmp"
+    - "*.temp"
+  filter_by_extension: false
+  excluded_extensions: [".exe", ".dll", ".sys"]
+  included_extensions: []
+  priority_folders: []
+  size_categories:
+    tiny: 1048576      # 1MB
+    small: 10485760    # 10MB
+    medium: 52428800   # 50MB
+    large: 9999999999  # Everything else
+
+# ============================================================================
+# EXTRACTION CONFIGURATION - AWS OPTIMIZED (12 Tika servers, 48 workers)
+# ============================================================================
+extraction:
+  total_workers: 48  # Use 75% of 64 CPUs
+  
+  pools:
+    fast_track:
+      num_workers: 16
+      queue_name: "tiny_queue"
+      tika_ports: [9998, 9999, 10000, 10001]
+      target_time_seconds: 10
+      
+    standard_track:
+      num_workers: 16
+      queue_name: "small_queue"
+      tika_ports: [10002, 10003, 10004, 10005]
+      target_time_seconds: 60
+      
+    heavy_track:
+      num_workers: 12
+      queue_name: "medium_queue"
+      tika_ports: [10006, 10007, 10008, 10009]
+      target_time_seconds: 180
+      
+    extreme_track:
+      num_workers: 4
+      queue_name: "large_queue"
+      tika_ports: [10010, 10011]
+      target_time_seconds: 600
+  
+  # 12 Tika instances with proper memory allocation
+  tika:
+    instances:
+      # Fast track Tika servers (4GB each) - for tiny files
+      - host: "localhost"
+        port: 9998
+        memory_mb: 4096
+        temp_dir: "/opt/document_search/temp/tika1"
+      - host: "localhost"
+        port: 9999
+        memory_mb: 4096
+        temp_dir: "/opt/document_search/temp/tika2"
+      - host: "localhost"
+        port: 10000
+        memory_mb: 4096
+        temp_dir: "/opt/document_search/temp/tika3"
+      - host: "localhost"
+        port: 10001
+        memory_mb: 4096
+        temp_dir: "/opt/document_search/temp/tika4"
+      
+      # Standard track Tika servers (6GB each) - for small files
+      - host: "localhost"
+        port: 10002
+        memory_mb: 6144
+        temp_dir: "/opt/document_search/temp/tika5"
+      - host: "localhost"
+        port: 10003
+        memory_mb: 6144
+        temp_dir: "/opt/document_search/temp/tika6"
+      - host: "localhost"
+        port: 10004
+        memory_mb: 6144
+        temp_dir: "/opt/document_search/temp/tika7"
+      - host: "localhost"
+        port: 10005
+        memory_mb: 6144
+        temp_dir: "/opt/document_search/temp/tika8"
+      
+      # Heavy track Tika servers (8GB each) - for medium files
+      - host: "localhost"
+        port: 10006
+        memory_mb: 8192
+        temp_dir: "/opt/document_search/temp/tika9"
+      - host: "localhost"
+        port: 10007
+        memory_mb: 8192
+        temp_dir: "/opt/document_search/temp/tika10"
+      - host: "localhost"
+        port: 10008
+        memory_mb: 8192
+        temp_dir: "/opt/document_search/temp/tika11"
+      - host: "localhost"
+        port: 10009
+        memory_mb: 8192
+        temp_dir: "/opt/document_search/temp/tika12"
+      
+      # Extreme track Tika servers (12GB each) - for large files
+      - host: "localhost"
+        port: 10010
+        memory_mb: 12288
+        temp_dir: "/opt/document_search/temp/tika13"
+      - host: "localhost"
+        port: 10011
+        memory_mb: 12288
+        temp_dir: "/opt/document_search/temp/tika14"
+    
+    timeout_seconds: 300  # Increased for large files
+    max_retries: 3
+    retry_backoff_seconds: [2, 5, 10]
+    connection_pool_size: 12
+  
+  ocr_detection:
+    min_text_length: 200
+    detect_by_mime_type: true
+    image_mime_prefixes: ["image/"]
+  
+  content_normalization:
+    lowercase: true
+    strip_whitespace: true
+    remove_timestamps: true
+    remove_page_numbers: true
+  
+  restart_after_files: 5000  # Restart after more files on AWS
+
+# ============================================================================
+# INDEXING CONFIGURATION - AWS OPTIMIZED
+# ============================================================================
+indexing:
+  num_workers: 12  # Use 12 CPUs for indexing
+  
+  opensearch:
+    hosts:
+      - "http://localhost:9200"
+    use_ssl: false
+    verify_certs: false
+    index_name: "enterprise_documents"
+    
+    # Larger batches for AWS
+    initial_batch_size: 1000
+    min_batch_size: 500
+    max_batch_size: 5000
+    batch_adjustment_step: 500
+    
+    flush_timeout_seconds: 10
+    
+    target_batch_time_seconds: 2.0
+    fast_batch_threshold_seconds: 1.5
+    slow_batch_threshold_seconds: 3.0
+    
+    timeout_seconds: 60
+    max_retries: 3
+    retry_backoff_seconds: [1, 2, 4]
+    connection_pool_size: 12
+    
+    bulk_refresh_interval: "30s"
+    normal_refresh_interval: "1s"
+  
+  mapping:
+    shards: 5  # More shards for AWS
+    replicas: 1  # Enable replicas for production
+    
+    field_boost:
+      file_name: 5.0
+      main_content: 2.0
+      embedded_content: 1.0
+      ocr_content: 0.8
+    
+    default_analyzer: "english"
+    ocr_analyzer: "standard"
+
+# ============================================================================
+# OCR CONFIGURATION - AWS OPTIMIZED
+# ============================================================================
+ocr:
+  initial_workers: 16  # Use 16 CPUs for initial OCR
+  post_indexing_workers: 32  # Use 32 CPUs for post-indexing OCR
+  
+  max_pages_per_pdf: 100  # Process full PDFs (up to 100 pages)
+  
+  poppler_path: "/usr/bin"  # Adjust for AWS Linux
+  
+  tesseract:
+    command: "tesseract"
+    datapath: "/usr/share/tesseract-ocr/4.00/tessdata"
+    languages: ["eng"]
+    engine_mode: "LSTM"
+    page_segmentation_mode: "AUTO"
+    timeout_seconds: 120
+  
+  preprocessing:
+    convert_to_grayscale: true
+    apply_noise_reduction: true  # Enable on AWS
+    enhance_contrast: true
+    correct_skew: true  # Enable on AWS
+    binarize: true
+    target_dpi: 300  # Higher DPI for better quality
+    use_opencv: true
+    use_pillow: true
+  
+  quality:
+    min_confidence: 25
+    good_confidence: 70
+    excellent_confidence: 90
+  
+  priorities: []
+  
+  multipage:
+    enable_parallel_pages: true  # Enable on AWS
+    max_parallel_pages: 4
+    incremental_update: true
+  
+  update_batch_size: 200
+
+# ============================================================================
+# ORCHESTRATOR CONFIGURATION - AWS OPTIMIZED
+# ============================================================================
+orchestrator:
+  heartbeat_interval_seconds: 30
+  heartbeat_timeout_seconds: 90
+  service_check_interval_seconds: 60
+  resource_check_interval_seconds: 60
+  
+  cpu:
+    high_threshold_percent: 95
+    low_threshold_percent: 70
+    sustained_duration_seconds: 300
+    throttle_reduction_percent: 20
+    scale_up_percent: 10
+  
+  memory:
+    warning_threshold_gb: 200   # 200GB on 256GB system
+    critical_threshold_gb: 230  # 230GB
+    emergency_threshold_gb: 245 # 245GB
+  
+  disk:
+    warning_threshold_gb: 100
+    critical_threshold_gb: 50
+    emergency_threshold_gb: 20
+  
+  checkpoint:
+    interval_seconds: 300
+    retention_count: 10
+    auto_save_on_shutdown: true
+  
+  shutdown:
+    grace_period_seconds: 120  # Longer grace period
+    force_after_grace: true
+  
+  circuit_breaker:
+    failure_threshold: 10
+    timeout_seconds: 120
+    half_open_attempts: 5
+
+# ============================================================================
+# LOGGING CONFIGURATION
+# ============================================================================
+logging:
+  default_level: "INFO"
+  components:
+    discovery: "INFO"
+    extraction: "INFO"
+    indexing: "INFO"
+    ocr: "INFO"
+    orchestrator: "INFO"
+    api: "INFO"
+  rotation:
+    max_bytes: 104857600  # 100 MB
+    backup_count: 30  # 30 days
+  format: "[%(asctime)s] [%(name)s] [%(levelname)s] [%(processName)s-%(process)d] %(message)s"
+  date_format: "%Y-%m-%d %H:%M:%S"
+  use_json: false
+
+# ============================================================================
+# ALERTING CONFIGURATION
+# ============================================================================
+alerting:
+  email:
+    enabled: true  # Enable for production
+    smtp_host: "smtp.office365.com"
+    smtp_port: 587
+    use_tls: true
+    from_address: "alerts@yourcompany.com"
+    to_addresses: ["admin@yourcompany.com"]
+  
+  critical_alerts:
+    - type: "processing_stopped"
+      threshold_seconds: 600
+    - type: "opensearch_unhealthy"
+      threshold: "red"
+    - type: "disk_space_critical"
+      threshold_gb: 20
+    - type: "memory_critical"
+      threshold_percent: 95
+    - type: "error_rate_high"
+      threshold_percent: 5
+    - type: "worker_crashes"
+      threshold_count: 10
+      threshold_period_seconds: 3600
+  
+  warning_alerts:
+    - type: "processing_slow"
+      threshold_percent: 50
+    - type: "opensearch_degraded"
+      threshold: "yellow"
+    - type: "disk_space_low"
+      threshold_gb: 50
+    - type: "error_rate_elevated"
+      threshold_percent: 1
+  
+  progress_updates:
+    interval_hours: 6
+  daily_summary:
+    enabled: true
+    time: "08:00"
+  completion_notification:
+    enabled: true
+
+# ============================================================================
+# API CONFIGURATION
+# ============================================================================
+api:
+  host: "0.0.0.0"
+  port: 8080
+  workers: 8  # More workers for AWS
+  require_auth: true  # Enable auth for production
+  cors_enabled: true
+  allowed_origins:
+    - "http://localhost:*"
+    - "https://yourcompany.com"
+  
+  search:
+    default_page_size: 20
+    max_page_size: 100
+    highlight_snippet_size: 150
+    max_highlights: 3
+    default_fields:
+      - "file_name^5"
+      - "main_content^2"
+      - "embedded_content"
+      - "ocr_content^0.8"
+  
+  rate_limit:
+    enabled: true
+    requests_per_minute: 1000  # Higher for AWS
+
+# ============================================================================
+# DASHBOARD CONFIGURATION
+# ============================================================================
+dashboard:
+  refresh_interval_seconds: 5
+  history_hours: 24
+  show_worker_details: true
+  show_error_details: true
+  show_resource_graphs: true
+
+# ============================================================================
+# OPERATIONAL MODES
+# ============================================================================
+modes:
+  default: "full"
+  available:
+    - "full"
+    - "resume"
+    - "incremental"
+  incremental:
+    check_modification_time: true
+    check_file_hash: true
+    rescan_interval_hours: 24
+
+# ============================================================================
+# PERFORMANCE TARGETS - AWS OPTIMIZED
+# ============================================================================
+performance:
+  targets:
+    discovery_files_per_second: 10000
+    extraction_files_per_second: 500
+    indexing_docs_per_second: 5000
+    ocr_pages_per_hour: 5000
+  
+  quality:
+    target_extraction_success_rate: 0.99
+    target_indexing_success_rate: 0.999
+    target_ocr_confidence: 0.85
+
+# ============================================================================
+# DEDUPLICATION CONFIGURATION
+# ============================================================================
+deduplication:
+  bloom_filter:
+    expected_elements: 10000000  # 10M files
+    false_positive_rate: 0.001
+  file_level:
+    enabled: true
+    hash_algorithm: "sha256"
+  content_level:
+    enabled: true
+    normalization:
+      lowercase: true
+      remove_whitespace: true
+      remove_punctuation: false
+    similarity_threshold: 1.0
+  duplicate_handling:
+    store_full_content: false
+    link_duplicates: true
+    track_duplicate_paths: true
+    max_duplicate_paths: 1000
+
+# ============================================================================
+# BACKUP AND RECOVERY
+# ============================================================================
+backup:
+  config_backup:
+    enabled: true
+    interval_hours: 24
+    retention_days: 30
+  queue_backup:
+    enabled: true
+    before_major_operations: true
+  checkpoint_backup:
+    enabled: true
+    retention_count: 20
+
+# ============================================================================
+# TESTING CONFIGURATION
+# ============================================================================
+testing:
+  test_mode: false
+  test_data_path: "/data/test_documents"
+  sample_size: 10000
+  baseline:
+    extraction_time_per_mb: 0.1
+    indexing_time_per_1000_docs: 1.0
+    ocr_time_per_page: 10

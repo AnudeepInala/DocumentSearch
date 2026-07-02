@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Tika configuration for RADAR document pipeline.
+  Ensures all font styles and encodings are extracted across PDF, Office, RTF, ODT, HTML etc.
+-->
+<properties>
+
+  <!-- ================================================================
+       DETECTOR: always attempt content-type detection before parsing
+  ================================================================ -->
+  <detectors>
+    <detector class="org.apache.tika.detect.DefaultDetector"/>
+  </detectors>
+
+  <!-- ================================================================
+       PARSERS
+  ================================================================ -->
+  <parsers>
+    <parser class="org.apache.tika.parser.DefaultParser"/>
+  </parsers>
+
+  <!-- ================================================================
+       PDF PARSER — use PDFBox for full font/encoding support
+  ================================================================ -->
+  <parser class="org.apache.tika.parser.pdf.PDFParser">
+    <params>
+      <!-- Extract text from all embedded fonts including Type3, CIDFont, etc. -->
+      <param name="extractInlineImages" type="bool">false</param>
+      <param name="extractUniqueInlineImagesOnly" type="bool">true</param>
+      <!-- Force unicode mapping even for fonts lacking ToUnicode tables -->
+      <param name="averageCharTolerance" type="float">0.3</param>
+      <param name="spacingTolerance" type="float">0.5</param>
+      <!-- Sort text by position so multi-column layouts extract correctly -->
+      <param name="sortByPosition" type="bool">true</param>
+      <!-- Do NOT suppress duplicate overlapping text (used in some fonts) -->
+      <param name="suppressDuplicateOverlappingText" type="bool">false</param>
+      <!-- Enable all content stream operators -->
+      <param name="enableAutoSpace" type="bool">true</param>
+      <!-- Render all font types including Type0 composite (CJK, decorative) -->
+      <param name="renderForReading" type="bool">false</param>
+    </params>
+  </parser>
+
+  <!-- ================================================================
+       OFFICE PARSER (DOC/XLS/PPT) — Apache POI
+  ================================================================ -->
+  <parser class="org.apache.tika.parser.microsoft.OfficeParser">
+    <params>
+      <!-- Include headers, footers, and text boxes -->
+      <param name="includeHeadersAndFooters" type="bool">true</param>
+      <param name="includeShapeBasedContent" type="bool">true</param>
+      <param name="includeSlideNotes" type="bool">true</param>
+      <param name="includeMasterPages" type="bool">true</param>
+      <param name="concatenatePhoneticRuns" type="bool">true</param>
+    </params>
+  </parser>
+
+  <!-- ================================================================
+       OOXML PARSER (DOCX/XLSX/PPTX) — Apache POI
+  ================================================================ -->
+  <parser class="org.apache.tika.parser.microsoft.ooxml.OOXMLParser">
+    <params>
+      <param name="includeHeadersAndFooters" type="bool">true</param>
+      <param name="includeShapeBasedContent" type="bool">true</param>
+      <param name="includeSlideNotes" type="bool">true</param>
+      <param name="includeMasterPages" type="bool">true</param>
+      <param name="concatenatePhoneticRuns" type="bool">true</param>
+      <!-- Extract SmartArt, charts, diagrams -->
+      <param name="includeMissingRows" type="bool">false</param>
+    </params>
+  </parser>
+
+  <!-- ================================================================
+       RTF PARSER
+  ================================================================ -->
+  <parser class="org.apache.tika.parser.rtf.RTFParser">
+    <params>
+      <!-- Limit max bytes per embedded object to avoid OOM on large RTF -->
+      <param name="maximumEmbeddedBlobSize" type="int">20971520</param>
+    </params>
+  </parser>
+
+  <!-- ================================================================
+       HTML PARSER — detect charset from meta tags
+  ================================================================ -->
+  <parser class="org.apache.tika.parser.html.HtmlParser">
+    <params>
+      <param name="extractScripts" type="bool">false</param>
+    </params>
+  </parser>
+
+</properties>

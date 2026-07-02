@@ -1,0 +1,7 @@
+{
+  "expected_elements": 10000000,
+  "false_positive_rate": 0.001,
+  "size": 143775875,
+  "hash_count": 9,
+  "elements_added": 12
+}

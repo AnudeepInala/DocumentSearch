@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Runtime data (generated at runtime, not source)
+runtime/logs/
+runtime/temp/
+runtime/checkpoints/
+runtime/metrics/
+runtime/backup/
+runtime/queue/
+runtime/cache/
+runtime/audit/
+runtime/data/
+runtime/reports/
+
+# PaddlePaddle models are in C:\softwares\paddle_models (not in repo)
+runtime/paddle_models/
+
+# Redis
+dump.rdb
+redis_backups/
+
+# Misc
+*.zip
+*.tar.gz
+*.log
+.env
