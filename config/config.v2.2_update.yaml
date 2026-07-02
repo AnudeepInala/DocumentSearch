@@ -1,0 +1,508 @@
+# Local Windows Configuration
+# Adapted for development/runtime on Windows
+# Created: 2026-02-05
+
+# ============================================================================
+# REDIS CONFIGURATION
+# ============================================================================
+redis:
+  url: "redis://localhost:6379/0"
+  max_connections: 50
+  timeout: 60
+
+# ============================================================================
+# NLP CONFIGURATION - ENABLED FOR LOCAL
+# ============================================================================
+nlp:
+  enabled: true
+  model_path: "en_core_web_md"
+  max_text_length: 500000
+
+# ============================================================================
+# TAGGING CONFIGURATION
+# ============================================================================
+tagging:
+  workers: 2
+  batch_size: 8
+  max_retries: 3
+  review_threshold: 0.75
+  taxonomy_path: "{app_root}\\runtime\\taxonomy\\master_taxonomy.xlsx"
+  metadata_excel_path: "{app_root}\\runtime\\test_state_matrix.xlsx"
+  metadata_mode_enabled: true
+  strict_spacy_when_no_metadata: true
+  required_non_empty_export_columns:
+    - smart_id
+    - file_name
+    - category
+    - department
+    - purpose
+    - key_names
+    - amount_found
+    - important_dates
+    - location_mentioned
+    - confidentiality
+    - current_status
+    - processed_on
+    - file_type
+    - file_size
+  metadata_input_source: "config"
+  metadata_upload_dir: "{app_root}\\runtime\\metadata\\uploads"
+  tagger_version: "local-hybrid-v1"
+  hot_reload_seconds: 30
+
+
+paths:
+  source_drive: "{app_root}\\Testing data1"
+  working_root: "{app_root}\\runtime"
+  queue_db: "{app_root}\\runtime\\queue"
+  temp_dir: "{app_root}\\runtime\\temp"
+  logs_dir: "{app_root}\\runtime\\logs"
+  checkpoints_dir: "{app_root}\\runtime\\checkpoints"
+  metrics_dir: "{app_root}\\runtime\\metrics"
+  backup_dir: "{app_root}\\runtime\\backup"
+  paddle_models_dir: "C:\\softwares\\paddle_models"
+  app_root: "E:\\DocumentSearch_v2.2"
+
+
+
+discovery:
+  num_workers: 2
+  partition_strategy: "AUTO"
+  custom_partitions: []
+  batch_size: 500
+  target_rate: 5000
+  continuous_discovery: true
+  rescan_interval_seconds: 3
+  exclude_patterns:
+    - "$RECYCLE.BIN"
+    - "System Volume Information"
+    - "*.tmp"
+    - "*.temp"
+    - "Thumbs.db"
+    - "desktop.ini"
+  filter_by_extension: false
+  excluded_extensions: [".exe", ".dll", ".sys", ".msi"]
+  included_extensions: []
+  priority_folders: []
+  size_categories:
+    tiny: 1048576      # 1MB
+    small: 10485760    # 10MB
+    medium: 52428800   # 50MB
+    large: 9999999999  # Everything else
+
+# ============================================================================
+# EXTRACTION CONFIGURATION - MEMORY OPTIMIZED (4 Tika servers, 6 workers)
+# ============================================================================
+extraction:
+  total_workers: 6
+  
+  pools:
+    fast_track:
+      num_workers: 2
+      queue_name: "tiny_queue"
+      tika_ports: [9998]
+      target_time_seconds: 10
+
+    standard_track:
+      num_workers: 2
+      queue_name: "small_queue"
+      tika_ports: [9998]
+      target_time_seconds: 60
+
+    heavy_track:
+      num_workers: 1
+      queue_name: "medium_queue"
+      tika_ports: [9998]
+      target_time_seconds: 180
+
+    extreme_track:
+      num_workers: 1
+      queue_name: "large_queue"
+      tika_ports: [9998]
+      target_time_seconds: 600
+
+  # Single Tika instance (shared with v2.1 services)
+  tika:
+    instances:
+      - host: "localhost"
+        port: 9998
+        memory_mb: 1024
+        temp_dir: "{app_root}\\runtime\\temp\\tika1"
+    timeout_seconds: 300
+    max_retries: 3
+    retry_backoff_seconds: [2, 5, 10]
+    connection_pool_size: 14
+  
+  ocr_detection:
+    min_text_length: 200
+    detect_by_mime_type: true
+    image_mime_prefixes: ["image/"]
+    corruption_check:
+      enabled: true
+      threshold: 0.30
+      scanner_boost: 1.15
+      weights:
+        entropy_anomaly: 0.15
+        bigram_plausibility: 0.45
+        alphanumeric_density: 0.10
+        word_fragment_ratio: 0.15
+        nonstandard_symbol_density: 0.15
+  
+  content_normalization:
+    lowercase: true
+    strip_whitespace: true
+    remove_timestamps: true
+    remove_page_numbers: true
+  
+  restart_after_files: 5000
+
+# ============================================================================
+# INDEXING CONFIGURATION - MEMORY OPTIMIZED
+# ============================================================================
+indexing:
+  num_workers: 2
+  
+  opensearch:
+    hosts:
+      - "http://localhost:9200"
+    use_ssl: false
+    verify_certs: false
+    index_name: "enterprise_documents"
+    
+    initial_batch_size: 1000
+    min_batch_size: 500
+    max_batch_size: 5000
+    batch_adjustment_step: 500
+    
+    flush_timeout_seconds: 10
+    startup_timeout_seconds: 120
+    
+    target_batch_time_seconds: 2.0
+    fast_batch_threshold_seconds: 1.5
+    slow_batch_threshold_seconds: 3.0
+    
+    timeout_seconds: 60
+    max_retries: 3
+    retry_backoff_seconds: [1, 2, 4]
+    connection_pool_size: 12
+    
+    bulk_refresh_interval: "30s"
+    normal_refresh_interval: "1s"
+  
+  mapping:
+    shards: 5
+    replicas: 1
+    
+    field_boost:
+      file_name: 5.0
+      main_content: 2.0
+      embedded_content: 1.0
+      ocr_content: 0.8
+    
+    default_analyzer: "english"
+    ocr_analyzer: "standard"
+
+# ============================================================================
+# OCR CONFIGURATION - MEMORY OPTIMIZED
+# ============================================================================
+ocr:
+  engine: "vl16"   # "tiered" | "vl16" | "paddle"
+  initial_workers: 8
+  post_indexing_workers: 8
+
+  max_pages_per_pdf: 100
+
+  # Update these paths after installation
+  poppler_path: "{app_root}\\bin\\poppler\\bin"
+
+  vl16:
+    pipeline_version: "v1.6"
+    use_doc_orientation_classify: true
+    use_doc_unwarping: false
+    use_layout_detection: true
+    timeout_seconds: 300
+
+  tiered:
+    min_contrast: 30.0       # std < 30  → degraded → VL-1.6
+    min_sharpness: 80.0      # laplacian var < 80 → blurry → VL-1.6
+    min_brightness: 40.0     # mean pixel < 40 → too dark → VL-1.6
+    max_brightness: 230.0    # mean pixel > 230 → overexposed (still clean)
+    pp_min_confidence: 70.0  # PP-OCRv4 conf < 70% → escalate to VL-1.6
+
+  paddle:
+    # GPU vs CPU is determined by the installed package (not a config flag):
+    #   CPU -> pip install paddlepaddle
+    #   GPU -> pip install paddlepaddle-gpu
+    lang: 
+      - "en"
+      - "te"
+    det: true
+    rec: true
+    cls: true
+    timeout_seconds: 120
+  
+  preprocessing:
+    convert_to_grayscale: true
+    apply_noise_reduction: true
+    enhance_contrast: true
+    correct_skew: true
+    binarize: true
+    binarize_max_brightness: 150
+    target_dpi: 300
+    use_opencv: true
+    use_pillow: true
+    # Strict visual review policy:
+    # Keep only true visual elements needed for this workflow
+    # (signature + logo), suppress typed/scanned text artifacts.
+    visual_allowed_types: ["signature", "logo", "stamp"]
+    signature_min_impact: 0.05
+    logo_min_impact: 0.05
+    stamp_min_impact: 0.50
+    text_anomaly_min_impact: 1.00
+    max_per_page_per_type:
+      signature: 2
+      logo: 1
+      stamp: 1
+
+  
+  quality:
+    min_confidence: 25
+    good_confidence: 70
+    excellent_confidence: 90
+  
+  # Smart OCR retries - try multiple preprocessing strategies and PSM modes
+  # to maximize text extraction from graphical images, colored backgrounds,
+  # different fonts, screenshots, diagrams, etc.
+  smart_retries:
+    enabled: true
+    min_confidence_threshold: 60
+    max_strategies: 9
+  
+  priorities: []
+  
+  multipage:
+    enable_parallel_pages: true
+    max_parallel_pages: 4
+    incremental_update: true
+  
+  update_batch_size: 200
+
+# ============================================================================
+# ORCHESTRATOR CONFIGURATION - LOCAL OPTIMIZED
+# ============================================================================
+orchestrator:
+  heartbeat_interval_seconds: 30
+  heartbeat_timeout_seconds: 90
+  service_check_interval_seconds: 60
+  resource_check_interval_seconds: 60
+  
+  cpu:
+    high_threshold_percent: 95
+    low_threshold_percent: 70
+    sustained_duration_seconds: 300
+    throttle_reduction_percent: 20
+    scale_up_percent: 10
+  
+  memory:
+    warning_threshold_gb: 15.5
+    critical_threshold_gb: 16.0
+    emergency_threshold_gb: 16.5
+  
+  disk:
+    warning_threshold_gb: 30
+    critical_threshold_gb: 10
+    emergency_threshold_gb: 5
+  
+  checkpoint:
+    interval_seconds: 300
+    retention_count: 10
+    auto_save_on_shutdown: true
+  
+  shutdown:
+    grace_period_seconds: 120
+    force_after_grace: true
+  
+  circuit_breaker:
+    failure_threshold: 10
+    timeout_seconds: 120
+    half_open_attempts: 5
+
+# ============================================================================
+# LOGGING CONFIGURATION
+# ============================================================================
+logging:
+  default_level: "INFO"
+  components:
+    discovery: "INFO"
+    extraction: "INFO"
+    indexing: "INFO"
+    ocr: "INFO"
+    orchestrator: "INFO"
+    api: "INFO"
+  rotation:
+    max_bytes: 104857600
+    backup_count: 30
+  format: "[%(asctime)s] [%(name)s] [%(levelname)s] [%(processName)s-%(process)d] %(message)s"
+  date_format: "%Y-%m-%d %H:%M:%S"
+  use_json: false
+
+# ============================================================================
+# ALERTING CONFIGURATION
+# ============================================================================
+alerting:
+  email:
+    enabled: false
+    smtp_host: "smtp.office365.com"
+    smtp_port: 587
+    use_tls: true
+    from_address: "alerts@yourcompany.com"
+    to_addresses: ["admin@yourcompany.com"]
+  
+  critical_alerts:
+    - type: "processing_stopped"
+      threshold_seconds: 600
+    - type: "opensearch_unhealthy"
+      threshold: "red"
+    - type: "disk_space_critical"
+      threshold_gb: 20
+    - type: "memory_critical"
+      threshold_percent: 95
+    - type: "error_rate_high"
+      threshold_percent: 5
+    - type: "worker_crashes"
+      threshold_count: 10
+      threshold_period_seconds: 3600
+  
+  warning_alerts:
+    - type: "processing_slow"
+      threshold_percent: 50
+    - type: "opensearch_degraded"
+      threshold: "yellow"
+    - type: "disk_space_low"
+      threshold_gb: 50
+    - type: "error_rate_elevated"
+      threshold_percent: 1
+  
+  progress_updates:
+    interval_hours: 6
+  daily_summary:
+    enabled: false
+    time: "08:00"
+  completion_notification:
+    enabled: false
+
+# ============================================================================
+# API CONFIGURATION
+# ============================================================================
+api:
+  host: "0.0.0.0"
+  port: 8080
+  workers: 8
+  require_auth: false
+  cors_enabled: true
+  allowed_origins:
+    - "*"
+  
+  search:
+    default_page_size: 20
+    max_page_size: 100
+    highlight_snippet_size: 150
+    max_highlights: 3
+    default_fields:
+      - "file_name^5"
+      - "main_content^2"
+      - "embedded_content"
+      - "ocr_content^0.8"
+  
+  rate_limit:
+    enabled: false
+    requests_per_minute: 1000
+
+# ============================================================================
+# DASHBOARD CONFIGURATION
+# ============================================================================
+dashboard:
+  refresh_interval_seconds: 5
+  history_hours: 24
+  show_worker_details: true
+  show_error_details: true
+  show_resource_graphs: true
+
+# ============================================================================
+# OPERATIONAL MODES
+# ============================================================================
+modes:
+  default: "full"
+  available:
+    - "full"
+    - "resume"
+    - "incremental"
+  incremental:
+    check_modification_time: true
+    check_file_hash: true
+    rescan_interval_hours: 24
+
+# ============================================================================
+# PERFORMANCE TARGETS - LOCAL OPTIMIZED
+# ============================================================================
+performance:
+  targets:
+    discovery_files_per_second: 10000
+    extraction_files_per_second: 500
+    indexing_docs_per_second: 5000
+    ocr_pages_per_hour: 5000
+  
+  quality:
+    target_extraction_success_rate: 0.99
+    target_indexing_success_rate: 0.999
+    target_ocr_confidence: 0.85
+
+# ============================================================================
+# DEDUPLICATION CONFIGURATION
+# ============================================================================
+deduplication:
+  bloom_filter:
+    expected_elements: 10000000
+    false_positive_rate: 0.001
+  file_level:
+    enabled: true
+    hash_algorithm: "sha256"
+  content_level:
+    enabled: true
+    normalization:
+      lowercase: true
+      remove_whitespace: true
+      remove_punctuation: false
+    similarity_threshold: 1.0
+  duplicate_handling:
+    store_full_content: false
+    link_duplicates: true
+    track_duplicate_paths: true
+    max_duplicate_paths: 1000
+
+# ============================================================================
+# BACKUP AND RECOVERY
+# ============================================================================
+backup:
+  config_backup:
+    enabled: true
+    interval_hours: 24
+    retention_days: 30
+  queue_backup:
+    enabled: true
+    before_major_operations: true
+  checkpoint_backup:
+    enabled: true
+    retention_count: 20
+
+# ============================================================================
+# TESTING CONFIGURATION
+# ============================================================================
+testing:
+  test_mode: false
+  test_data_path: "{app_root}\\test_data"
+  sample_size: 10000
+  baseline:
+    extraction_time_per_mb: 0.1
+    indexing_time_per_1000_docs: 1.0
+    ocr_time_per_page: 10
